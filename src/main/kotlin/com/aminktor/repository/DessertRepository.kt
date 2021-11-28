@@ -1,47 +1,34 @@
 package com.aminktor.repository
 
-import com.aminktor.data.desserts
 import com.aminktor.models.Dessert
-import io.ktor.features.*
+import com.aminktor.models.DessertsPage
+import com.aminktor.models.PagingInfo
+import com.mongodb.client.MongoClient
+import com.mongodb.client.MongoCollection
+import org.litote.kmongo.getCollection
 
-class DessertRepository : RepositoryInterface<Dessert> {
-    override fun getById(id: String): Dessert {
-        return try {
-            desserts.find { it.id == id } ?: throw NotFoundException("No dessert with that ID")
+class DessertRepository(client: MongoClient) : RepositoryInterface<Dessert> {
+    override lateinit var col: MongoCollection<Dessert>
+
+    init {
+        val database = client.getDatabase("test")
+        col = database.getCollection<Dessert>("Dessert")
+    }
+
+    fun getDessertsPage(page: Int, size: Int): DessertsPage {
+        try {
+            val skips = page * size
+            val res = col.find().skip(skips).limit(size)
+            val results = res.asIterable().map { it }
+            val totalDessert = col.estimatedDocumentCount()
+            val totalPages = (totalDessert / size) + 1
+            val next = if (results.isNotEmpty()) page + 1 else null
+            val prev = if (page > 0) page - 1 else null
+            val info = PagingInfo(totalDessert.toInt(), totalPages.toInt(), next, prev)
+            return DessertsPage(results, info)
         } catch (e: Exception) {
-            throw Exception("cannot find dessert")
+            throw Exception("Cannot get pages")
         }
     }
 
-    override fun getAll(): List<Dessert> {
-        return desserts
-    }
-
-    override fun delete(id: String): Boolean {
-        return try {
-            val dessert = desserts.find { it.id == id } ?: throw NotFoundException("No dessert with that ID")
-            desserts.remove(dessert)
-            true
-        } catch (e: Exception) {
-            throw Exception("cannot find dessert")
-        }
-    }
-
-    override fun add(entry: Dessert): Dessert {
-        desserts.add(entry)
-        return entry
-    }
-
-    override fun update(entry: Dessert): Dessert {
-        return try {
-            val dessert = desserts.find { it.id == entry.id }?.apply {
-                name = entry.name
-                description = entry.description
-                imageUrl = entry.imageUrl
-            } ?: throw NotFoundException("No dessert with that ID")
-            dessert
-        } catch (e: Exception) {
-            throw Exception("cannot find dessert")
-        }
-    }
 }
